@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dilemma Spel - Slimme Keuken</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --wit: #fff;
+            --lichtblauw: #d5ebf7;
+            --blauw: #FCAA67;
+            --lichtgrijs: #fafafa;
+            --roze: #ffdddf;
+            --rood: #095256;
+            --grijs: #7d7d7d;
+            --zwart: #000;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--lichtgrijs);
+            background-image: url('achtergrondkeuken.png');
+            background-repeat: repeat;
+            background-size: 800px;
+            background-attachment: fixed;
+            padding: 40px 20px;
+            color: var(--zwart);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: var(--wit);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.05);
+            font-size: 1.25rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .button {
+            padding: 20px;
+            margin: 20px 0;
+            border: none;
+            background-color: var(--rood);
+            color: var(--wit);
+            font-size: 1.25rem;
+            cursor: pointer;
+            border-radius: 12px;
+            width: 100%;
+        }
+
+        .button:hover {
+            background-color: var(--blauw);
+        }
+
+        #dilemmaGame button {
+            width: 48%;
+            display: inline-block;
+        }
+
+        #dilemmaText {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        select,
+        input[type='number'] {
+            padding: 10px;
+            font-size: 1.2rem;
+            width: 100%;
+            margin: 10px 0 20px;
+            border: 1px solid var(--grijs);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--grijs);
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: var(--lichtblauw);
+        }
+
+        .fixed-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .logo-fixed {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+        }
+
+        .logo-fixed img {
+            height: 45px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" id="welcome">
+        <h2 style="text-align: center;">Welkom bij het slimme keuken dilemma spel!</h2>
+        <p style="text-align: center;">Mag ULLB je gegevens opslaan voor onderzoek?</p>
+        <button class="button" onclick="acceptDataSharing(true)">Ja</button>
+        <button class="button" onclick="acceptDataSharing(false)">Nee</button>
+    </div>
+
+    <div class="container hidden" id="userInfo">
+        <h3 style="text-align: center;">Vul je gegevens in</h3>
+        <label>Geslacht:</label>
+        <select id="gender">
+            <option value="man">Man</option>
+            <option value="vrouw">Vrouw</option>
+            <option value="anders">Anders</option>
+        </select>
+        <label>Leeftijd:</label>
+        <input type="number" id="age" min="10" max="100">
+        <button class="button" onclick="validateAndStartGame()">Ga door naar het spel</button>
+    </div>
+
+    <div class="container hidden" id="introPage">
+        <h2 style="text-align: center;">Jouw slimme keuken van de toekomst</h2>
+        <p style="text-align: center;">
+            Wat vind jij belangrijk als mens? Wil je zelf bepalen wat er gebeurt, of laat je liever slimme technologie
+            beslissen? Vind je privacy belangrijk, of mag jouw badkamer alles over je weten en delen als dat je helpt?
+        </p>
+        <p style="text-align: center;">
+            Straks krijg je een paar situaties te zien die je aan het denken zetten. Je kiest steeds tussen twee opties
+            – niet goed of fout, gewoon jouw voorkeur.
+        </p>
+        <p style="text-align: center;">
+            Klaar om te ontdekken wat jij belangrijk vindt?
+        </p>
+
+
+        <button class="button" onclick="startGame()">Start het spel</button>
+    </div>
+
+
+    <div class="container hidden" id="dilemmaGame">
+        <h3 id="dilemmaText">Dilemma komt hier...</h3>
+        <div style="display: flex; justify-content: space-between; gap: 4%">
+            <button class="button" id="option1"></button>
+            <button class="button" id="option2"></button>
+        </div>
+    </div>
+
+    <div class="container hidden" id="result">
+        <h2 style="text-align: center;">Jouw slimme keuken profiel</h2>
+        <p style="text-align: center;" id="profileText"></p>
+        <button class="button" onclick="restartGame()">Opnieuw spelen</button>
+    </div>
+
+    <div class="logo-fixed">
+        <img src="ULLB-logo-zwart.svg" alt="Logo" />
+    </div>
+
+    <script>
+        let allowDataStorage = false;
+        let allUsers = [];
+        let userData = {
+            toestemming: null,
+            leeftijd: null,
+            geslacht: null,
+            keuzes: []
+        };
+
+        let categoryScores = {
+            "privacy": 0,
+            "automatisering": 0,
+            "duurzaamheid": 0,
+            "veiligheid": 0,
+            "comfort": 0
+        };
+
+        const dilemmas = {
+            "1. Autonomie vs. Beïnvloeding": [
+                ["1.1 Een koelkast die je suggesties geeft op basis van je voorraad en stemming, maar jij beslist wat je eet.",
+                    "vs Een koelkast die automatisch ingrediënten reserveert of maaltijden plant op basis van je eetpatroon en gezondheidstrends."
+                ],
+                ["1.2 Een kookplaat die je drie kookmodi aanbiedt (snel, normaal, mindful), afgestemd op je dagritme.",
+                    "vs Een kookplaat die zelf het kookproces regelt op basis van je stressniveau en beschikbare tijd."
+                ],
+                ["1.3 Een boodschappen-app die je laat kiezen welke producten aangevuld moeten worden.",
+                    "vs Een app die op basis van gebruik, seizoensdata en gezondsheidsdoelen automatisch bestellingen plaatst."
+                ],
+                ["1.4 Een slimme oven die je vraagt of je iets lichters wil eten na een calorierijke dag.",
+                    "vs Een oven die zelf beslist welk type maaltijd passend is en suggesties uitsluit die niet binnen je voedingsdoelen vallen."
+                ],
+                ["1.5 Een slimme blender die je keuze bevestigt en optioneel suggesties doet op basis van je recent gedrag.",
+                    "vs Een blender die recepten blokkeert die buiten je dieetdoelen vallen en automatisch alternatieven toont."
+                ]
+            ],
+            "2. Transparantie vs. Onzichtbaarheid": [
+                ["2.1 Een slimme keukendisplay die toont waarom je kookplaat temperatuur aanpast (bijv. aanbranden voorkomen, vetreductie).",
+                    "vs Een kookplaat die automatisch aanpast, zonder uitleg of meldingen."
+                ],
+                ["2.2 Een koelkast die uitlegt waarom producten worden verplaatst of gemarkeerd (zoals bederf, voedingswaarde).",
+                    "vs Een koelkast die producten reorganiseert en labelt zonder toelichting."
+                ],
+                ["2.3 Een kook-app die elke stap, timing en reden voor keuzes toont tijdens het koken.",
+                    "vs Een app die enkel een eindresultaat belooft en zonder uitleg door het recept heen leidt."
+                ],
+                ["2.4 Een keukensysteem waarin je alle sensormetingen, voorspellingen en aanpassingen kunt inzien.",
+                    "vs Een keukensysteem dat alles op de achtergrond regelt, zonder toegang tot data of motieven."
+                ],
+                ["2.5 Een oven die uitlegt waarom hij de bereidingstijd verlengt (zoals interne temperatuur of vochtigheid).",
+                    "vs Een oven die aanpassingen doet zonder iets te melden tenzij er een fout optreedt."
+                ]
+            ],
+            "3. Comfort vs. Efficiëntie": [
+                ["3.1 Een slimme kookplaat die alles instelt naar jouw voorkeuren en door blijft koken zolang jij wil.",
+                    "vs Een kookplaat die automatisch stopt op het moment dat het eten gaar is."
+                ],
+                ["3.2 Een keuken die 's ochtends alvast de waterkoker en verlichting activeert op basis van je routine.",
+                    "vs Een keuken die inschakelt als je fysieke aanwezigheid is gedetecteerd."
+                ],
+                ["3.3 Een slimme assistent die je helpt met uitgebreid koken op drukke dagen, inclusief rustmomenten.",
+                    "vs Een assistent die het koken juist versimpelt door alleen noodzakelijke stappen aan te bieden op drukke dagen."
+                ],
+                ["3.4 Een slimme koelkast die comfortgerechten voorstelt op basis van je stemming en trek.",
+                    "vs Een koelkast die gezonde, snelle opties aandraagt op basis van je dagplanning en prestaties."
+                ],
+                ["3.5 Een kraan die standaard jouw favoriete temperatuur en kracht onthoudt en instelt.",
+                    "vs Een kraan die het waterverbruik analyseert en automatisch vermindert bij verspilling."
+                ]
+            ],
+            "4. Privacy vs. Inzicht": [
+                ["4.1 Een kookplaat die enkel reageert op handbewegingen en niets registreert.",
+                    "vs Een kookplaat die kookstijl, snelheid en fouten monitort om persoonlijke suggesties te geven."
+                ],
+                ["4.2 Een koelkast die alleen temperatuur en verval detecteert zonder gegevens op te slaan.",
+                    "vs Een koelkast die voedingskeuzes, innamepatronen en gezondheid analyseert via AI-logging."
+                ],
+                ["4.3 Een kookapp die enkel je gekozen recept toont, zonder gedragsdata op te slaan.",
+                    "vs Een app die je keuzes over tijd analyseert en rapportages maakt van je voedingsgedrag."
+                ],
+                ["4.4 Een slimme kraan die zich aanpast op basis van algemene gebruikspatronen, zonder data per persoon op te slaan.",
+                    "vs Een kraan die analyseert hoe goed en hoe lang je je handen wast, en dat koppelt aan persoonlijke hygiëne-inzichten."
+                ],
+                ["4.5 Een slimme weegschaal die enkel je gewicht en weegmoment registreert, zonder koppeling met andere data of systemen.",
+                    "vs Een slimme weegschaal die je gewicht koppelt aan je maaltijdgedrag, hydratatie en stressniveau, en deze inzichten opslaat in een persoonlijk gezondheidsdashboard."
+                ]
+            ],
+            "5. Emotionele sturing vs. Zelfreflectie": [
+                ["5.1 Een keuken die rustgevende muziek en warm licht aanzet als je gestrest bent.",
+                    "vs Een keuken die je opmerkt en zegt: “Je lijkt gespannen, wil je iets lichters koken vandaag?”"
+                ],
+                ["5.2 Een geurverspreider die bij verhoogde hartslag rustgevende geuren activeert.",
+                    "vs Een geurverspreider die je vraagt of je een geur wil kiezen die past bij je stemming."
+                ],
+                ["5.3 Een kookdisplay dat opmerkt dat je gehaast bent en de stappen vertraagt of vereenvoudigt.",
+                    "vs Een kookdisplay dat benoemt: “Je snelheid is hoog, wil je even pauze nemen?”"
+                ],
+                ["5.4 Een oven die merkt dat je gefrustreerd bent en automatisch overstapt naar een makkelijker recept.",
+                    "vs Een oven die je de optie geeft om zelf te beslissen of je wil aanpassen op basis van stressniveau."
+                ],
+                ["5.5 Een keuken die automatisch pauzemomenten inlast als je spanning detecteert.",
+                    "vs Een keuken die je laat weten dat je gespannen oogt, maar niets verandert zonder jouw input."
+                ]
+            ],
+            "6. Voorspelbaarheid vs. Adaptiviteit": [
+                ["6.1 Een kookplaat die elke dag dezelfde instellingen hanteert voor jouw standaard recepten.",
+                    "vs Een kookplaat die elke dag kleine aanpassingen doet op basis van je energieniveau en slaapdata."
+                ],
+                ["6.2 Een koffiezetapparaat dat altijd je favoriete brouwsel maakt op exact dezelfde wijze.",
+                    "vs Een apparaat dat de sterkte en hoeveelheid aanpast op basis van je hartslag en ochtendritme."
+                ],
+                ["6.3 Een recepten-app die elke ochtend je standaardontbijt laat zien.",
+                    "vs Een app die je ontbijtkeuze elke dag aanpast op basis van je activiteit en voedingsinname van gisteren."
+                ],
+                ["6.4 Een koelkast die dagelijks exact hetzelfde overzicht toont.",
+                    "vs Een koelkast die het overzicht dynamisch aanpast op basis van wat waarschijnlijk snel bederft."
+                ],
+                ["6.5 Een keukenscherm dat steeds dezelfde stappen toont bij het koken.",
+                    "vs Een scherm dat het tempo, de volgorde en hoeveelheid instructie aanpast aan je concentratie en ervaring."
+                ]
+            ],
+            "7. Collectieve optimalisatie vs. Individuele optimalisatie": [
+                ["7.1 Een keuken die op basis van het huishouden een gemiddeld kookritme en voorraadbeheer hanteert.",
+                    "vs Een keuken die jouw voorkeuren herkent en daarop meteen aanpast, zelfs als dat botst met anderen."
+                ],
+                ["7.2 Een geurmodule die neutrale geuren kiest om iedereen tevreden te houden.",
+                    "vs Een geurmodule die jouw persoonlijke geurprofiel activeert zodra je herkend wordt."
+                ],
+                ["7.3 Een keukenassistent die gezamenlijke weekmenu’s opstelt op basis van de voorkeuren en allergieën van alle gezinsleden.",
+                    "vs Een keukenassistent die voor jou een apart menu maakt, los van het gezinsplan, op basis van jouw persoonlijke doelen en voorkeuren."
+                ],
+                ["7.4 Een kookhulp die zich richt op groepsplanning en gezamenlijke maaltijden.",
+                    "vs Een kookhulp die jouw eigen planning en doelen voorop stelt, zelfs tijdens gezinsmomenten."
+                ],
+                ["7.5 Een slimme keukenmonitor die laat zien hoe gezond het eetpatroon van het hele huishouden is, met groepsfeedback en tips voor verbetering.",
+                    "vs Een slimme keukenmonitor die jou individueel aanspreekt op je eetgedrag en persoonlijke adviezen geeft, zonder anderen daarin te betrekken."
+                ]
+            ],
+            "8. Bewustwording vs. Frictieloze ervaring": [
+                ["8.1 Een slimme pan die je feedback geeft op baktechniek, timing en temperatuur met meldingen.",
+                    "vs Een pan die deze variabelen automatisch regelt zonder jou iets te laten weten."
+                ],
+                ["8.2 Een keuken die je na elke maaltijd laat zien hoe gezond en gevarieerd je hebt gegeten.",
+                    "vs Een keuken die stilletjes je voeding optimaliseert zonder je daar mee te belasten."
+                ],
+                ["8.3 Een app die je inzicht geeft in CO₂-uitstoot, waterverbruik en verspilling per maaltijd.",
+                    "vs Een app die automatisch je impact minimaliseert maar je niets toont tenzij je erom vraagt."
+                ],
+                ["8.4 Een kookscherm dat je helpt bewuster te proeven en langzamer te eten.",
+                    "vs Een systeem dat je eettempo subtiel reguleert door portiegrootte en pauzes zonder uitleg."
+                ],
+                ["8.5 Een koelkast die live feedback geeft over houdbaarheid en voedingsbalans.",
+                    "vs Een koelkast die alles aanpast maar dit niet zichtbaar maakt voor de gebruiker."
+                ]
+            ],
+            "9. Ingrijpen vs. Observeren": [
+                ["9.1 Een keuken die bij afwijkend gedrag (bijv. weinig eten, overeten) automatisch hulp inschakelt.",
+                    "vs Een keuken die afwijkingen monitort en alleen registreert voor zelfinzage."
+                ],
+                ["9.2 Een oven die op basis van rook- of brandgevaar automatisch uitschakelt en hulpdiensten waarschuwt.",
+                    "vs Een oven die alleen een melding toont en jou de actie laat bepalen."
+                ],
+                ["9.3 Een slimme snijplank die je houding corrigeert met trillingen.",
+                    "vs Een snijplank die je snijgedrag stil analyseert en alleen rapporteert in een overzicht."
+                ],
+                ["9.4 Een keuken die voedsel versleutelt voor donatie zodra je het te lang laat liggen.",
+                    "vs Een keuken die enkel bijhoudt hoeveel voedsel ongebruikt blijft en je daarover informeert."
+                ],
+                ["9.5 Een blender die bij overbelasting direct uitschakelt om blessures te voorkomen.",
+                    "vs Een blender die je waarschuwt en vraagt of je wil doorgaan."
+                ]
+            ]
+        };
+
+
+        let selectedDilemmas = [];
+        let dilemmaCategories = [];
+        let currentDilemmaIndex = 0;
+
+        function acceptDataSharing(choice) {
+            allowDataStorage = choice;
+            userData = {
+                toestemming: choice,
+                leeftijd: null,
+                geslacht: null,
+                keuzes: [],
+                sessionId: Date.now(),
+                _alreadySaved: false
+            };
+            document.getElementById("welcome").classList.add("hidden");
+            document.getElementById("userInfo").classList.remove("hidden");
+        }
+
+        function uploadToGoogleSheet() {
+            fetch("https://script.google.com/macros/s/AKfycbxv56n1IzL_qgv-8ZxONEQHRwncg2qW8Mw6tJymfL72-aAzDl_pMK30I5xwwAQNCrNh/exec", {
+                    method: "POST",
+                    mode: "no-cors",
+                    body: JSON.stringify(userData),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                })
+                .then(res => res.text())
+                .then(response => {
+                    console.log("Success:", response);
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                });
+        }
+
+        function validateAndStartGame() {
+            let age = document.getElementById("age").value;
+            let gender = document.getElementById("gender").value;
+            if (!age || age < 5 || age > 120) {
+                alert("Voer een geldige leeftijd in!");
+                return;
+            }
+            userData.leeftijd = age;
+            userData.geslacht = gender;
+            document.getElementById("userInfo").classList.add("hidden");
+            document.getElementById("introPage").classList.remove("hidden");
+
+        }
+
+        function startGame() {
+            document.getElementById("introPage").classList.add("hidden");
+            document.getElementById("dilemmaGame").classList.remove("hidden");
+            document.getElementById("userInfo").classList.add("hidden");
+            document.getElementById("dilemmaGame").classList.remove("hidden");
+            selectedDilemmas = [];
+            dilemmaCategories = [];
+            Object.keys(dilemmas).forEach(thema => {
+                const keuzes = dilemmas[thema];
+                const [optie1, optie2] = keuzes[Math.floor(Math.random() * keuzes.length)];
+
+                const cleanOptie1 = optie1.replace(/^\d+\.\d+\s*/, "").trim();
+                const cleanOptie2 = optie2.replace(/^vs\s*/i, "").trim();
+
+                selectedDilemmas.push([cleanOptie1, cleanOptie2]);
+                dilemmaCategories.push(thema);
+            });
+            currentDilemmaIndex = 0;
+            showDilemma();
+        }
+
+
+        function showDilemma() {
+            const [option1, option2] = selectedDilemmas[currentDilemmaIndex];
+            document.getElementById("dilemmaText").innerText = "Kies een van de volgende opties:";
+            document.getElementById("option1").innerText = option1;
+            document.getElementById("option2").innerText = option2;
+            const oldBtn1 = document.getElementById("option1");
+            const oldBtn2 = document.getElementById("option2");
+
+            const newBtn1 = oldBtn1.cloneNode(true);
+            const newBtn2 = oldBtn2.cloneNode(true);
+
+            oldBtn1.parentNode.replaceChild(newBtn1, oldBtn1);
+            oldBtn2.parentNode.replaceChild(newBtn2, oldBtn2);
+
+            newBtn1.innerText = option1;
+            newBtn2.innerText = option2;
+
+            newBtn1.onclick = () => makeChoice(false);
+            newBtn2.onclick = () => makeChoice(true);
+        }
+
+
+        function makeChoice(isRightSideChosen) {
+            const thema = dilemmaCategories[currentDilemmaIndex];
+            const [optieLinks, optieRechts] = selectedDilemmas[currentDilemmaIndex];
+
+            const cleanThema = thema.replace(/^\d+\.\s*/, "");
+            const [themaLinks, themaRechts] = cleanThema.split(/\s+vs\.?\s*/i);
+
+
+            const gekozenWaarde = isRightSideChosen ? themaRechts.trim() : themaLinks.trim();
+            const gekozenScenario = isRightSideChosen ? optieRechts.trim() : optieLinks.trim();
+
+            if (allowDataStorage) {
+                userData.keuzes.push({
+                    leeftijd: userData.leeftijd,
+                    geslacht: userData.geslacht,
+                    thema: thema,
+                    gekozen_waarde: gekozenWaarde,
+                    dilemma: `${optieLinks.trim()} ${optieRechts.trim()}`,
+                    gekozen_scenario: gekozenScenario
+                });
+            }
+
+            currentDilemmaIndex++;
+            if (currentDilemmaIndex < selectedDilemmas.length) {
+                showDilemma();
+            } else {
+                showResults();
+            }
+        }
+
+
+
+        function showResults() {
+            document.getElementById("dilemmaGame").classList.add("hidden");
+            document.getElementById("result").classList.remove("hidden");
+
+            if (!userData._alreadySaved && userData.keuzes.length === 9) {
+                allUsers.push(JSON.parse(JSON.stringify(userData)));
+                userData._alreadySaved = true;
+            }
+
+            const voorkeuren = userData.keuzes.map(k => k.gekozen_waarde.toLowerCase());
+            const profielregels = [];
+
+            if (voorkeuren.includes("privacy")) {
+                profielregels.push(
+                    "Je hecht waarde aan je privacy en vindt het belangrijk dat technologie jouw grenzen respecteert."
+                );
+            }
+            if (voorkeuren.includes("inzicht")) {
+                profielregels.push(
+                    "Je wil begrijpen wat er gebeurt, inzicht en data helpen jou om controle te houden.");
+            }
+            if (voorkeuren.includes("autonomie")) {
+                profielregels.push("Je maakt graag je eigen keuzes, zonder dat technologie de regie overneemt.");
+            }
+            if (voorkeuren.includes("beïnvloeding")) {
+                profielregels.push(
+                    "Je staat open voor technologie die jou begeleidt, zelfs als dat betekent dat je iets van controle inlevert."
+                );
+            }
+            if (voorkeuren.includes("transparantie")) {
+                profielregels.push("Je waardeert systemen die uitleg geven en zichtbaar maken wat er gebeurt.");
+            }
+            if (voorkeuren.includes("onzichtbaarheid")) {
+                profielregels.push(
+                    "Voor jou hoeft technologie niet op de voorgrond, zolang het maar werkt hoeft het niet op te vallen."
+                );
+            }
+            if (voorkeuren.includes("comfort")) {
+                profielregels.push(
+                    "Comfort staat centraal voor jou, je wil dat technologie het leven makkelijker maakt.");
+            }
+            if (voorkeuren.includes("efficiëntie")) {
+                profielregels.push(
+                    "Je kiest voor doelgerichtheid en duurzaamheid: technologie moet helpen om verspilling te voorkomen."
+                );
+            }
+            if (voorkeuren.includes("zelfreflectie")) {
+                profielregels.push(
+                    "Je wil technologie die jou helpt om stil te staan bij jezelf, zonder je te sturen.");
+            }
+            if (voorkeuren.includes("emotionele sturing")) {
+                profielregels.push("Je staat open voor technologie die actief inspeelt op je stemming en emoties.");
+            }
+
+            if (profielregels.length === 0) {
+                profielregels.push(
+                    "Je maakt genuanceerde keuzes en laat je niet makkelijk in een hokje stoppen. Dat is óók waardevol."
+                );
+            }
+
+            const profieltekst = profielregels.join(" ");
+            document.getElementById("profileText").innerText = profieltekst.trim();
+
+            if (allowDataStorage) {
+                uploadToGoogleSheet();
+            }
+        }
+
+        function restartGame() {
+            userData = {
+                toestemming: null,
+                leeftijd: null,
+                geslacht: null,
+                keuzes: [],
+                sessionId: Date.now(),
+                _alreadySaved: false
+            };
+            document.getElementById("result").classList.add("hidden");
+            document.getElementById("welcome").classList.remove("hidden");
+        }
+    </script>
+
+</body>
+
+</html>
